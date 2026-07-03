@@ -3,6 +3,8 @@ const cors = require("cors");
 require("dotenv").config();
 
 const groupRoutes = require("./routes/groupRoutes");
+const groupParticipantRoutes = require("./routes/groupParticipantRoutes");
+const participantRoutes = require("./routes/participantRoutes");
 
 const app = express();
 
@@ -12,5 +14,8 @@ app.use(express.json());
 app.get("/health", (req, res) => res.json({ status: "ok" }));
 
 app.use("/api/groups", groupRoutes);
+app.use("/api/groups/:groupId/participants", groupParticipantRoutes);
+app.use("/api/participants", participantRoutes);
+
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => console.log(`Serveur lancé sur le port ${PORT}`));
