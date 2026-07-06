@@ -1,4 +1,4 @@
-# Tricount — Test technique The Next Mind
+# Mini-tricount
 
 Une application de partage de dépenses en groupe, inspirée de Tricount.  
 Stack : React · Express · SQLite
