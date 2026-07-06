@@ -1,7 +1,7 @@
 # Tricount — Test technique The Next Mind
 
 Une application de partage de dépenses en groupe, inspirée de Tricount.  
-Stack : React, Express, PostgreSQL
+Stack : React · Express · SQLite
 
 ---
 
@@ -10,36 +10,14 @@ Stack : React, Express, PostgreSQL
 ### Prérequis
 
 - Node.js 18+
-- PostgreSQL installé et démarré
+- Aucune installation de base de données requise
 
 ### Backend
 
 ```bash
 cd backend
 npm install
-```
-
-Crée un fichier `.env` dans `backend/` :
-
-```env
-PORT=3001
-DB_HOST=localhost
-DB_PORT=5432
-DB_NAME=tricount
-DB_USER=ton_user
-DB_PASSWORD=ton_mot_de_passe
-```
-
-Crée la base de données puis lance les migrations :
-
-```bash
-psql -U ton_user -c "CREATE DATABASE tricount;"
 node src/db/migrate.js
-```
-
-Lance le serveur :
-
-```bash
 npm run dev
 ```
 
@@ -75,13 +53,13 @@ Exemple avec Alice (paie 90€), Bob (paie 30€), Claire (ne paie rien) pour un
 - Soldes : Alice +50, Bob -10, Claire -40
 - Résultat : Claire → Alice 40€, Bob → Alice 10€ → **2 virements** au lieu de 3
 
-L'algorithme greedy donne le minimum de virements dans la grande majorité des cas. Il n'est pas garanti optimal dans tous les cas extrêmes (c'est un problème NP-difficile), mais pour des groupes humains de taille raisonnable il est parfait.
+L'algorithme greedy donne le minimum de virements dans la grande majorité des cas. Il n'est pas garanti optimal dans tous les cas extrêmes, mais pour des groupes humains de taille raisonnable il est parfait.
 
-### Base de données
+### Base de données — SQLite
 
-4 tables : `groups`, `participants`, `expenses`, `expense_shares`. La table `expense_shares` stocke la part de chaque participant pour chaque dépense., ça permet de gérer finement qui participe à quoi et prépare la gestion des dépenses inégales.
+J'ai développé initialement avec PostgreSQL en local. Pour faciliter les tests sans obliger à installer un serveur de base de données, j'ai switché vers **SQLite** via `better-sqlite3` — même syntaxe SQL, même architecture, juste le client qui change. Les données sont persistées dans un fichier local `tricount.db` créé automatiquement à la migration.
 
-Les suppressions sont en cascade (`ON DELETE CASCADE`) : supprimer un groupe supprime tout ce qui lui est lié.
+4 tables : `groups`, `participants`, `expenses`, `expense_shares`. La table `expense_shares` stocke la part de chaque participant pour chaque dépense — ça permet de gérer finement qui participe à quoi et prépare la gestion des dépenses inégales.
 
 ### Frontend
 
@@ -91,19 +69,21 @@ React avec Vite pour la rapidité de setup. Tailwind pour le style — pas de co
 
 ## Ce que je n'ai pas eu le temps de faire
 
-**Persistance côté client** — les données sont en base PostgreSQL donc persistées, mais il n'y a pas de cache local ou d'optimistic update. Chaque action recharge les données depuis l'API.
-
 **Gestion des dépenses inégales** — la table `expense_shares` est déjà prévue pour ça (chaque participant a sa propre `share_amount`), mais l'interface ne permet pas encore de définir des parts différentes par personne. Avec plus de temps j'aurais ajouté un mode "montants personnalisés" dans le formulaire d'ajout de dépense.
 
-**Mini-feature IA** — j'aurais voulu ajouter un champ "décris ta dépense en langage naturel" qui pré-remplit automatiquement le formulaire (libellé, montant, participants) via l'API Claude. La structure est prête pour l'intégrer côté backend.
+**Mini-feature IA** — j'aurais voulu ajouter un champ "décris ta dépense en langage naturel" qui pré-remplit automatiquement le formulaire (libellé, montant, participants) via l'API OpenAI ou claude code.
 
 ---
 
 ## Ce que je changerais avec Next.js et FastAPI
 
-**Next.js** — les pages auraient bénéficié du Server Side Rendering pour le premier chargement, notamment la liste des groupes. Les Server Components auraient permis de faire les appels BDD directement sans passer par une API REST pour certaines pages.
+Je n'ai pas encore beaucoup utilisé ces deux technologies mais voici ce que
+j'ai compris de leurs avantages pour ce projet.
 
-**FastAPI** — typage fort avec Pydantic, validation automatique des requêtes, et la doc Swagger générée automatiquement. L'algorithme de settlement aurait été plus lisible en Python avec des dataclasses typées.
+**Next.js** — le SSR (Server Side Rendering) permettrait de charger la liste des groupes
+côté serveur, évitant le flash de chargement actuel avec useEffect.
+
+**FastAPI** — la validation automatique des requêtes via une librairie (pydantic) remplacerait mes vérifications manuelles dans les controllers.
 
 ---
 
@@ -111,8 +91,8 @@ React avec Vite pour la rapidité de setup. Tailwind pour le style — pas de co
 
 - Ajouter des tests unitaires sur l'algorithme de settlement — c'est la partie la plus critique
 - Gérer les erreurs côté frontend avec des toasts plutôt que des `alert()`
-- Ajouter un loader skeleton sur les listes pendant le chargement
-- Protéger les routes avec un système d'authentification simple
+
+---
 
 ## Ce que j'ai essayé qui n'a pas marché
 
@@ -120,13 +100,15 @@ React avec Vite pour la rapidité de setup. Tailwind pour le style — pas de co
 
 Ma première idée était de traiter chaque dépense indépendamment : pour chaque dépense, chaque participant rembourse sa part directement au payeur. L'implémentation était simple mais le résultat était mauvais sur un groupe de 6 personnes avec 7 dépenses on pouvait se retrouver avec 20+ virements alors que 5 suffisent.
 
-J'ai abandonné cette approche dès que j'ai réalisé qu'elle ignorait complètement les compensations entre dépenses.
+### Pourquoi j'ai choisi cette approche
 
-<!--
-### Deuxième piste — graphe de dettes avec simplification
+J'ai cherché comment faire le moins de virements possible.
+L'idée c'est de ne pas raisonner dépense par dépense, mais de
+calculer un solde global pour chaque personne — ce qu'elle a payé
+moins ce qu'elle devait payer.
 
-J'ai réfléchi à modéliser les dettes comme un graphe orienté et à simplifier les cycles — si Alice doit 10€ à Bob et Bob doit 6€ à Alice, on simplifie en une seule dette de 4€. Conceptuellement plus élégant, mais plus complexe à implémenter correctement et ça ne garantissait pas non plus le minimum de virements dans tous les cas. -->
+Ensuite je règle toujours la plus grosse dette en premier. Comme ça
+à chaque virement au moins une personne est complètement soldée, ce
+qui garantit un nombre minimal de transactions.
 
-### Pourquoi j'ai choisi greedy
-
-J'ai volontairement écarté la solution vraiment optimale (NP-difficile, type subset sum) car sa complexité explose avec le nombre de participants et n'a aucun sens pour une app de partage entre amis. Le greedy est le meilleur compromis : simple, rapide , explicable en 30 secondes, et optimal dans la grande majorité des cas réels. C'est d'ailleurs l'approche utilisée par Tricount lui-même.
+C'est simple, rapide, et c'est l'approche utilisée par Tricount lui-même.
