@@ -44,9 +44,6 @@ const computeSettlement = async (groupId) => {
     creditors.sort((a, b) => b.amount - a.amount);
     debtors.sort((a, b) => b.amount - a.amount);
 
-    console.log("Créditeurs:", JSON.stringify(creditors));
-    console.log("Débiteurs:", JSON.stringify(debtors));
-
     const creditor = creditors[0];
     const debtor = debtors[0];
     const amount = Math.min(creditor.amount, debtor.amount);
